@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>QR Share – send files with moving QR codes</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@400;600;800&display=swap">
+<style>
+:root{--bg:#f2f3fb;--card:#fff;--ink:#13193a;--mute:#5d6584;--line:#dfe2f3;--acc:#5b3df5;--acc2:#12b8a6;--on:#fff;--bad:#b42318;--ok:#067647;--g1:rgba(91,61,245,.16);--g2:rgba(18,184,166,.16);--sh:0 10px 30px rgba(19,25,58,.08);
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0b1022;--card:#151c3a;--ink:#eef0ff;--mute:#9aa3c7;--line:#28315e;--acc:#8e7bff;--acc2:#3ddbc5;--on:#0b1022;--bad:#ff8a80;--ok:#5fd39a;--g1:rgba(142,123,255,.18);--g2:rgba(61,219,197,.12);--sh:0 10px 30px rgba(0,0,0,.35);color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#0b1022;--card:#151c3a;--ink:#eef0ff;--mute:#9aa3c7;--line:#28315e;--acc:#8e7bff;--acc2:#3ddbc5;--on:#0b1022;--bad:#ff8a80;--ok:#5fd39a;--g1:rgba(142,123,255,.18);--g2:rgba(61,219,197,.12);--sh:0 10px 30px rgba(0,0,0,.35);color-scheme:dark}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;color:var(--ink);font:400 16px/1.5 "Bricolage Grotesque",system-ui,sans-serif;background:radial-gradient(800px 420px at 90% -8%,var(--g1),transparent 60%),radial-gradient(700px 420px at -10% 8%,var(--g2),transparent 60%),var(--bg);background-color:var(--bg);min-height:100vh}
+main{max-width:660px;margin:0 auto;padding:22px 16px 56px}
+.hero{display:flex;gap:16px;align-items:center;margin-bottom:22px}
+.logo{width:64px;height:64px;flex:none;filter:drop-shadow(0 6px 10px rgba(91,61,245,.3))}
+h1{font-size:38px;line-height:1;margin:0 0 6px;font-weight:800;letter-spacing:-.03em}
+.sub{color:var(--mute);margin:0;max-width:46ch}
+.tabs{display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:4px;background:var(--card);border:1px solid var(--line);border-radius:999px;margin-bottom:18px;box-shadow:var(--sh)}
+.tabs button{padding:11px;font:600 16px "Bricolage Grotesque",system-ui,sans-serif;background:transparent;color:var(--mute);border:0;border-radius:999px;cursor:pointer}
+.tabs button[aria-selected="true"]{background:linear-gradient(135deg,var(--acc),var(--acc2));color:var(--on)}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:22px;box-shadow:var(--sh)}
+label{display:block;font-weight:600;margin:14px 0 6px}
+label:first-child{margin-top:0}
+textarea,input[type=text],select{width:100%;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+textarea{min-height:84px;resize:vertical}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:12px}
+.row>input{flex:1;min-width:140px}
+.btn{font:600 15px "Bricolage Grotesque",system-ui,sans-serif;background:var(--acc);color:var(--on);border:0;border-radius:12px;padding:12px 20px;cursor:pointer;box-shadow:0 6px 16px rgba(91,61,245,.28)}
+.btn.alt{background:transparent;color:var(--ink);border:1.5px solid var(--line);box-shadow:none}
+.btn.big{padding:14px 28px;font-size:17px}
+.btn:focus-visible,.tabs button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible,#dz:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.btn[disabled]{opacity:.5;cursor:not-allowed}
+.note{color:var(--mute);font-size:14px;margin:8px 0 0}
+.err{color:var(--bad)} .good{color:var(--ok)}
+#dz{border:2px dashed var(--line);border-radius:18px;padding:26px 16px;text-align:center;cursor:pointer;background:var(--bg);transition:border-color .15s,background .15s}
+#dz.over{border-color:var(--acc);background:var(--g1)}
+#dz b{display:block;font-size:17px}
+#dz span{color:var(--mute);font-size:14px}
+#flist{list-style:none;margin:10px 0 0;padding:0}
+#flist li{display:flex;gap:10px;align-items:center;padding:8px 12px;border:1px solid var(--line);border-radius:12px;margin-bottom:6px}
+#flist li span{flex:1;word-break:break-all}
+#flist em{font-style:normal;color:var(--mute);font-size:13px}
+.x{border:0;background:transparent;color:var(--mute);font-size:22px;line-height:1;cursor:pointer}
+.stage{display:flex;justify-content:center;margin-top:18px}
+.frame{position:relative;display:inline-block;padding:12px;background:#fff;border-radius:18px;box-shadow:var(--sh)}
+.frame::before,.frame::after{content:"";position:absolute;width:30px;height:30px;border:5px solid var(--acc);border-radius:6px}
+.frame::before{top:-5px;left:-5px;border-right:0;border-bottom:0}
+.frame::after{bottom:-5px;right:-5px;border-left:0;border-top:0;border-color:var(--acc2)}
+#qr{display:block;max-width:100%}
+.num{text-align:center;font-weight:800;font-size:26px;margin-top:14px;letter-spacing:-.01em}
+.bar{height:8px;background:var(--line);border-radius:8px;margin:12px 0 6px;overflow:hidden}.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--acc2));border-radius:8px}
+.cd{text-align:center;padding:18px 0}
+.ringbox{position:relative;width:132px;height:132px;margin:0 auto 10px}
+.ring{width:132px;height:132px;transform:rotate(-90deg)}
+.ring circle{fill:none;stroke-width:8}.ring .bg{stroke:var(--line)}
+.ring .fg{stroke:var(--acc);stroke-linecap:round;stroke-dasharray:327;stroke-dashoffset:0;animation:ring 1s linear forwards}
+@keyframes ring{to{stroke-dashoffset:327}}
+.ringbox b{position:absolute;inset:0;display:grid;place-items:center;font-size:52px;font-weight:800}
+video{width:100%;max-height:58vh;background:#000;display:block;border-radius:10px}
+.item{border-top:1px solid var(--line);padding-top:14px;margin-top:14px}
+.item h3{margin:0 0 6px;font-size:16px;word-break:break-all}
+.item img,.item video{max-width:100%;display:block;margin:8px 0;border-radius:12px}
+pre{white-space:pre-wrap;word-break:break-word;background:var(--bg);border-radius:12px;padding:12px;margin:8px 0;font:14px/1.5 ui-monospace,monospace}
+[hidden]{display:none!important}
+@media (prefers-reduced-motion:reduce){.ring .fg{animation-duration:.01s}}
+</style>
+</head>
+<body>
+<main>
+<header class="hero">
+<svg class="logo" viewBox="0 0 48 48" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="4" fill="var(--acc)"/><rect x="28" y="4" width="16" height="16" rx="4" fill="var(--acc2)"/><rect x="4" y="28" width="16" height="16" rx="4" fill="var(--acc2)"/><rect x="28" y="28" width="7" height="7" rx="2" fill="var(--acc)"/><rect x="37" y="37" width="7" height="7" rx="2" fill="var(--acc)"/><rect x="37" y="28" width="7" height="7" rx="2" fill="var(--ink)" opacity=".25"/></svg>
+<div><h1>QR Share</h1><p class="sub">Send text, photos and videos to another screen as a stream of QR codes. No cables, no accounts.</p></div>
+</header>
+
+<div class="tabs" role="tablist">
+<button role="tab" id="tSend" aria-selected="true">Send</button>
+<button role="tab" id="tRecv" aria-selected="false">Receive</button>
+</div>
+
+<section class="panel" id="send">
+<label for="txt">Text to send</label>
+<textarea id="txt" placeholder="Type or paste a message"></textarea>
+<label>Files</label>
+<div id="dz" tabindex="0" role="button" aria-label="Choose files or drop them here"><b>Drop files here</b><span>or click to browse. Photos, videos, anything.</span></div>
+<input type="file" id="files" multiple hidden>
+<ul id="flist"></ul>
+<label for="spd">Speed: <span id="spdv">4</span> codes per second</label>
+<input type="range" id="spd" min="1" max="12" value="4" style="width:100%">
+<label for="csz">Code size</label>
+<select id="csz"><option value="120">Compact: easiest to scan</option><option value="200" selected>Standard</option><option value="320">Dense: fastest, needs a steady camera</option></select>
+<p class="note" id="est">Add something to send.</p>
+<div class="row">
+<button class="btn big" id="start">Start</button>
+<button class="btn alt" id="stop" hidden>Stop sharing</button>
+</div>
+<p class="note err" id="sErr" role="alert"></p>
+
+<div id="live" hidden>
+<div id="cd" class="cd" hidden>
+<div class="ringbox"><svg class="ring" viewBox="0 0 120 120"><circle class="bg" cx="60" cy="60" r="52"/><circle class="fg" id="ringfg" cx="60" cy="60" r="52"/></svg><b id="cdn">5</b></div>
+<p class="note">Get the receiving device ready. Codes start in a moment.</p>
+</div>
+<div id="show" hidden>
+<div class="stage"><div class="frame"><canvas id="qr"></canvas></div></div>
+<div class="num" id="num"></div>
+<div class="bar"><i id="pbar"></i></div>
+<p class="note" id="status"></p>
+<div class="row">
+<button class="btn alt" id="prev">Previous</button>
+<button class="btn" id="pp">Pause</button>
+<button class="btn alt" id="next">Next</button>
+<button class="btn alt" id="replay">Replay from start</button>
+</div>
+<label for="rev">Show specific codes</label>
+<div class="row" style="margin-top:0"><input type="text" id="rev" placeholder="Missed codes, e.g. 3, 7-9, 12" inputmode="text"><button class="btn alt" id="revgo">Review</button></div>
+<p class="note">Review shows only the codes you list and holds each one still while the receiver scans it.</p>
+</div>
+</div>
+</section>
+
+<section class="panel" id="recv" hidden>
+<div class="frame" style="display:block"><video id="vid" playsinline muted></video></div>
+<div class="bar"><i id="rbar"></i></div>
+<p class="note" id="rprog">Waiting for camera…</p>
+<p class="note" id="miss"></p>
+<p class="note err" id="rErr" role="alert"></p>
+<div class="row">
+<button class="btn big" id="rstop">Stop and show results</button>
+<button class="btn" id="rcont" hidden>Continue scanning</button>
+<button class="btn alt" id="rreset" hidden>Start over</button>
+<button class="btn alt" id="copymiss" hidden>Copy missing list</button>
+</div>
+<div id="result"></div>
+</section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
+<script>
+const $ = s => document.querySelector(s);
+const enc = new TextEncoder(), dec = new TextDecoder();
+const b64 = u => { let s = ""; for (let i = 0; i < u.length; i++) s += String.fromCharCode(u[i]); return btoa(s); };
+const unb64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const fmt = n => n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : n > 1024 ? (n / 1024).toFixed(1) + " KB" : n + " B";
+function el(tag, props, kids) { const e = document.createElement(tag); Object.assign(e, props || {}); (kids || []).forEach(k => e.append(k)); return e; }
+// sorted 0-based indexes -> "3–7, 12" (1-based)
+function ranges(a, max) {
+  const out = []; max = max || 40;
+  for (let i = 0; i < a.length;) {
+    let j = i; while (j + 1 < a.length && a[j + 1] === a[j] + 1) j++;
+    out.push(j > i ? (a[i] + 1) + "–" + (a[j] + 1) : "" + (a[i] + 1));
+    i = j + 1;
+    if (out.length >= max) { if (i < a.length) out.push("…"); break; }
+  }
+  return out.join(", ");
+}
+
+/* ---------- modes ---------- */
+function setMode(m) {
+  const send = m === "send";
+  $("#tSend").setAttribute("aria-selected", send);
+  $("#tRecv").setAttribute("aria-selected", !send);
+  $("#send").hidden = !send; $("#recv").hidden = send;
+  if (send) stopCamera(); else { stopSend(); startScan(true); }
+}
+$("#tSend").onclick = () => setMode("send");
+$("#tRecv").onclick = () => setMode("recv");
+
+/* ---------- sender: dropbox ---------- */
+let files = [];
+const dz = $("#dz"), fi = $("#files");
+dz.onclick = () => fi.click();
+dz.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); fi.click(); } };
+["dragenter", "dragover"].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.add("over"); }));
+["dragleave", "drop"].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); dz.classList.remove("over"); }));
+dz.addEventListener("drop", e => addFiles(e.dataTransfer.files));
+fi.onchange = () => { addFiles(fi.files); fi.value = ""; };
+function addFiles(list) { for (const f of list) files.push(f); renderFiles(); estimate(); }
+function renderFiles() {
+  const ul = $("#flist"); ul.replaceChildren();
+  files.forEach((f, i) => {
+    const b = el("button", { className: "x", type: "button", textContent: "×", title: "Remove" });
+    b.setAttribute("aria-label", "Remove " + f.name);
+    b.onclick = () => { files.splice(i, 1); renderFiles(); estimate(); };
+    ul.append(el("li", {}, [el("span", { textContent: f.name }), el("em", { textContent: fmt(f.size) }), b]));
+  });
+}
+function estimate() {
+  const fps = +$("#spd").value, cs = +$("#csz").value;
+  $("#spdv").textContent = fps;
+  let bytes = enc.encode($("#txt").value).length;
+  for (const f of files) bytes += f.size;
+  if (!bytes) { $("#est").textContent = "Add something to send."; return; }
+  const n = Math.ceil((bytes + 100) / cs), s = Math.ceil(n / fps);
+  $("#est").textContent = fmt(bytes) + " becomes about " + n + " codes: " + (s > 90 ? Math.round(s / 60) + " min" : s + " s") + " per full loop.";
+}
+["#txt", "#spd", "#csz"].forEach(s => { $(s).addEventListener("input", estimate); $(s).addEventListener("change", estimate); });
+
+/* ---------- sender: frames ---------- */
+let all = null, N = 0, CSZ = 200, sid = "", tn = 0, order = null, pos = 0, playing = false, timer = null, cdTimer = null;
+const len = () => order ? order.length : N, at = p => order ? order[p] : p;
+
+async function build() {
+  const parts = [], meta = [], t = $("#txt").value;
+  if (t.trim()) { const b = enc.encode(t); parts.push(b); meta.push({ n: "Text message", t: "text/plain", s: b.length, x: 1 }); }
+  for (const f of files) { const b = new Uint8Array(await f.arrayBuffer()); parts.push(b); meta.push({ n: f.name, t: f.type || "application/octet-stream", s: b.length }); }
+  const h = enc.encode(JSON.stringify(meta));
+  all = new Uint8Array(4 + h.length + parts.reduce((a, p) => a + p.length, 0));
+  new DataView(all.buffer).setUint32(0, h.length);
+  all.set(h, 4);
+  let o = 4 + h.length; for (const p of parts) { all.set(p, o); o += p.length; }
+  sid = Math.random().toString(36).slice(2, 6); CSZ = +$("#csz").value; N = Math.ceil(all.length / CSZ);
+  const probe = "QT2|" + sid + "|" + N + "|" + N + "|" + CSZ + "|" + "A".repeat(4 * Math.ceil(CSZ / 3));
+  tn = (makeQR(probe, 0).getModuleCount() - 17) / 4;
+}
+const frame = i => "QT2|" + sid + "|" + i + "|" + N + "|" + CSZ + "|" + b64(all.subarray(i * CSZ, (i + 1) * CSZ));
+function makeQR(str, type) { const q = qrcode(type, "L"); q.addData(str, "Byte"); q.make(); return q; }
+
+function draw(str) {
+  const q = makeQR(str, tn), n = q.getModuleCount(), cv = $("#qr"), dpr = window.devicePixelRatio || 1;
+  const avail = Math.min($("#show").clientWidth - 30, 460);
+  const cell = Math.max(2, Math.floor(avail * dpr / (n + 8))), dim = cell * (n + 8);
+  cv.width = cv.height = dim; cv.style.width = cv.style.height = dim / dpr + "px";
+  const cx = cv.getContext("2d");
+  cx.fillStyle = "#fff"; cx.fillRect(0, 0, dim, dim); cx.fillStyle = "#000";
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) cx.fillRect((c + 4) * cell, (r + 4) * cell, cell, cell);
+}
+function show() {
+  const i = at(pos);
+  draw(frame(i));
+  $("#num").textContent = "Code " + (i + 1) + " of " + N;
+  $("#pbar").style.width = ((pos + 1) / len() * 100) + "%";
+}
+function status() {
+  $("#pp").textContent = playing ? "Pause" : "Play";
+  $("#status").textContent = order
+    ? "Reviewing " + order.length + " code" + (order.length > 1 ? "s" : "") + ": " + ranges(order) + (playing ? " (looping)." : ". Use Next and Previous to step.")
+    : playing ? "Looping all " + N + " codes." : "Paused. Use Next and Previous to step.";
+}
+function loop() {
+  clearTimeout(timer);
+  if (!playing) return;
+  show();
+  timer = setTimeout(() => { pos = (pos + 1) % len(); loop(); }, 1000 / +$("#spd").value);
+}
+function step(d) { playing = false; clearTimeout(timer); pos = (pos + d + len()) % len(); show(); status(); }
+
+function setCd(n) {
+  $("#cdn").textContent = n;
+  const c = $("#ringfg"); c.style.animation = "none"; void c.getBoundingClientRect(); c.style.animation = "";
+}
+async function startSend() {
+  $("#sErr").textContent = "";
+  if (!files.length && !$("#txt").value.trim()) { $("#sErr").textContent = "Type some text or add a file first."; return; }
+  $("#start").disabled = true;
+  try { await build(); } catch (e) { $("#sErr").textContent = "Could not prepare the codes: " + e.message; $("#start").disabled = false; return; }
+  $("#start").disabled = false; $("#start").hidden = true; $("#stop").hidden = false;
+  $("#live").hidden = false; $("#show").hidden = true; $("#cd").hidden = false;
+  let n = 5; setCd(n);
+  cdTimer = setInterval(() => {
+    n--;
+    if (n > 0) { setCd(n); return; }
+    clearInterval(cdTimer);
+    $("#cd").hidden = true; $("#show").hidden = false;
+    order = null; pos = 0; playing = true; status(); loop();
+  }, 1000);
+}
+function stopSend() {
+  clearInterval(cdTimer); clearTimeout(timer); playing = false;
+  $("#live").hidden = true; $("#stop").hidden = true; $("#start").hidden = false;
+}
+$("#start").onclick = startSend;
+$("#stop").onclick = stopSend;
+$("#pp").onclick = () => { playing = !playing; status(); if (playing) loop(); else clearTimeout(timer); };
+$("#prev").onclick = () => step(-1);
+$("#next").onclick = () => step(1);
+$("#replay").onclick = () => { order = null; pos = 0; playing = true; status(); loop(); };
+$("#revgo").onclick = () => {
+  const set = new Set();
+  let ok = true;
+  for (const p of $("#rev").value.replace(/[–—]/g, "-").split(/[,\s]+/)) {
+    if (!p) continue;
+    const m = p.match(/^(\d+)(?:-(\d+))?$/);
+    if (!m) { ok = false; break; }
+    let a = +m[1], b = m[2] ? +m[2] : a; if (a > b) [a, b] = [b, a];
+    for (let k = Math.max(a, 1); k <= Math.min(b, N); k++) set.add(k - 1);
+  }
+  if (!ok || !set.size) { $("#status").textContent = "Enter code numbers from 1 to " + N + ", like 3, 7-9, 12."; return; }
+  order = [...set].sort((x, y) => x - y); pos = 0; playing = false; clearTimeout(timer); show(); status();
+};
+
+/* ---------- receiver ---------- */
+let stream = null, scanning = false, got = new Map(), RN = 0, rsid = "", rcs = 200, last = -1, dirty = false, rtimer = null;
+const work = document.createElement("canvas"), wx = work.getContext("2d", { willReadFrequently: true });
+const miss = () => { const m = []; for (let i = 0; i < RN; i++) if (!got.has(i)) m.push(i); return m; };
+
+async function startScan(keep) {
+  if (scanning) return;
+  if (!keep) resetRecv();
+  $("#result").replaceChildren();
+  $("#rErr").textContent = "";
+  $("#rprog").textContent = "Waiting for camera permission…";
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 } }, audio: false });
+  } catch (e) {
+    $("#rErr").textContent = "Camera unavailable (" + (e.name || "error") + "). Allow camera access in the browser, and open this page over HTTPS in its own tab if it is embedded.";
+    $("#rprog").textContent = ""; return;
+  }
+  const v = $("#vid"); v.srcObject = stream; await v.play();
+  scanning = true; dirty = true;
+  $("#rstop").hidden = false; $("#rcont").hidden = $("#rreset").hidden = true;
+  rtimer = setInterval(refresh, 600);
+  loop2();
+}
+function loop2() {
+  if (!scanning) return;
+  const v = $("#vid");
+  if (v.readyState >= 2 && v.videoWidth) {
+    const w = Math.min(v.videoWidth, 960), h = Math.round(w * v.videoHeight / v.videoWidth);
+    work.width = w; work.height = h; wx.drawImage(v, 0, 0, w, h);
+    const r = jsQR(wx.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: "dontInvert" });
+    if (r && r.data) take(r.data);
+  }
+  requestAnimationFrame(loop2);
+}
+function take(s) {
+  const p = s.split("|");
+  if (p.length !== 6 || p[0] !== "QT2") return;
+  const i = +p[2], n = +p[3], cs = +p[4];
+  if (p[1] !== rsid) { got.clear(); rsid = p[1]; RN = n; rcs = cs; }
+  last = i;
+  if (got.has(i)) { dirty = true; return; }
+  try { got.set(i, unb64(p[5])); dirty = true; } catch (e) {}
+}
+function refresh() {
+  if (!dirty || !RN) return;
+  dirty = false;
+  const m = miss();
+  $("#rbar").style.width = (got.size / RN * 100) + "%";
+  $("#rprog").textContent = got.size === RN
+    ? "All " + RN + " codes received. Press Stop to see the results."
+    : "Received " + got.size + " of " + RN + ". Last scanned: code " + (last + 1) + ".";
+  $("#miss").textContent = m.length ? "Missing codes: " + ranges(m) : "Nothing missing.";
+}
+function stopCamera() {
+  scanning = false; clearInterval(rtimer);
+  if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  $("#vid").srcObject = null;
+}
+function resetRecv() { got = new Map(); RN = 0; rsid = ""; last = -1; $("#rbar").style.width = "0"; $("#miss").textContent = ""; $("#copymiss").hidden = true; $("#result").replaceChildren(); }
+
+$("#rstop").onclick = () => { dirty = true; refresh(); stopCamera(); $("#rstop").hidden = true; $("#rcont").hidden = $("#rreset").hidden = false; showResult(); };
+$("#rcont").onclick = () => startScan(true);
+$("#rreset").onclick = () => startScan(false);
+$("#copymiss").onclick = async () => {
+  try { await navigator.clipboard.writeText(ranges(miss(), 1e9).replace(/–/g, "-")); $("#copymiss").textContent = "Copied"; }
+  catch (e) { $("#copymiss").textContent = "Copy failed"; }
+};
+
+function getBytes(a, b) {
+  const out = new Uint8Array(b - a);
+  if (b <= a) return out;
+  for (let c = Math.floor(a / rcs); c <= Math.floor((b - 1) / rcs); c++) {
+    const d = got.get(c); if (!d) return null;
+    const s = c * rcs, from = Math.max(a, s), to = Math.min(b, s + d.length);
+    out.set(d.subarray(from - s, to - s), from - a);
+  }
+  return out;
+}
+function missIn(a, b) { const m = []; for (let c = Math.floor(a / rcs); c <= Math.floor((Math.max(b, a + 1) - 1) / rcs); c++) if (!got.has(c)) m.push(c); return m; }
+
+function showResult() {
+  const R = $("#result"); R.replaceChildren();
+  if (!got.size) { R.append(el("p", { className: "note", textContent: "No codes were scanned." })); return; }
+  const m = miss(), done = !m.length;
+  const sum = el("div", { className: "item" }, [el("p", { className: done ? "good" : "err", textContent: done ? "All " + RN + " codes received." : "Received " + got.size + " of " + RN + ". Missing codes: " + ranges(m) })]);
+  if (!done) { sum.append(el("p", { className: "note", textContent: "Press Continue scanning to collect the rest. On the sender, type the missing numbers into Show specific codes to hold each one still." })); $("#copymiss").hidden = false; $("#copymiss").textContent = "Copy missing list"; }
+  R.append(sum);
+  let meta = null, off = 0;
+  try {
+    const h0 = getBytes(0, 4), L = h0 && new DataView(h0.buffer).getUint32(0), hb = h0 && getBytes(4, 4 + L);
+    if (hb) { meta = JSON.parse(dec.decode(hb)); off = 4 + L; }
+  } catch (e) { meta = null; }
+  if (!meta) { sum.append(el("p", { className: "err", textContent: "The file list (the first codes) is incomplete, so no items can be shown yet." })); return; }
+  for (const f of meta) {
+    const data = getBytes(off, off + f.s), mi = data ? [] : missIn(off, off + f.s);
+    off += f.s;
+    const item = el("div", { className: "item" }, [el("h3", { textContent: f.n + " (" + fmt(f.s) + ")" })]);
+    if (!data) item.append(el("p", { className: "err", textContent: "Incomplete. Missing codes: " + ranges(mi, 20) }));
+    else if (f.x) {
+      const txt = dec.decode(data), cp = el("button", { className: "btn alt", textContent: "Copy text" });
+      cp.onclick = async () => { try { await navigator.clipboard.writeText(txt); cp.textContent = "Copied"; } catch (e) { cp.textContent = "Copy failed"; } };
+      item.append(el("pre", { textContent: txt }), cp);
+    } else {
+      const url = URL.createObjectURL(new Blob([data], { type: f.t }));
+      if (f.t.startsWith("image/")) item.append(el("img", { src: url, alt: f.n }));
+      else if (f.t.startsWith("video/")) item.append(el("video", { src: url, controls: true, playsInline: true }));
+      item.append(el("a", { href: url, download: f.n, textContent: "Download file" }));
+    }
+    R.append(item);
+  }
+}
+estimate();
+</script>
+</body>
+</html>
