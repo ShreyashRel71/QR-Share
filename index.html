@@ -91,6 +91,7 @@ pre{white-space:pre-wrap;word-break:break-word;background:var(--bg);border-radiu
 <input type="range" id="spd" min="1" max="12" value="4" style="width:100%">
 <label for="csz">Code size</label>
 <select id="csz"><option value="120">Compact: easiest to scan</option><option value="200" selected>Standard</option><option value="320">Dense: fastest, needs a steady camera</option></select>
+<label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" id="lp" checked style="width:auto"> Loop continuously (turn off to show each code once, then stop)</label>
 <p class="note" id="est">Add something to send.</p>
 <div class="row">
 <button class="btn big" id="start">Start</button>
@@ -221,7 +222,7 @@ function makeQR(str, type) { const q = qrcode(type, "L"); q.addData(str, "Byte")
 
 function draw(str) {
   const q = makeQR(str, tn), n = q.getModuleCount(), cv = $("#qr"), dpr = window.devicePixelRatio || 1;
-  const avail = Math.min($("#show").clientWidth - 30, 460);
+  const avail = Math.max(180, Math.min($("#show").clientWidth - 30, 460, window.innerHeight - 200));
   const cell = Math.max(2, Math.floor(avail * dpr / (n + 8))), dim = cell * (n + 8);
   cv.width = cv.height = dim; cv.style.width = cv.style.height = dim / dpr + "px";
   const cx = cv.getContext("2d");
@@ -244,10 +245,18 @@ function loop() {
   clearTimeout(timer);
   if (!playing) return;
   show();
-  timer = setTimeout(() => { pos = (pos + 1) % len(); loop(); }, 1000 / +$("#spd").value);
+  timer = setTimeout(() => {
+    if (pos + 1 >= len() && !$("#lp").checked) {
+      playing = false; status();
+      $("#status").textContent = "All " + len() + " codes have been shown. Press Replay from start to send them again.";
+      return;
+    }
+    pos = (pos + 1) % len(); loop();
+  }, 1000 / +$("#spd").value);
 }
 function step(d) { playing = false; clearTimeout(timer); pos = (pos + d + len()) % len(); show(); status(); }
 
+const bring = e => e.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
 function setCd(n) {
   $("#cdn").textContent = n;
   const c = $("#ringfg"); c.style.animation = "none"; void c.getBoundingClientRect(); c.style.animation = "";
@@ -259,6 +268,7 @@ async function startSend() {
   try { await build(); } catch (e) { $("#sErr").textContent = "Could not prepare the codes: " + e.message; $("#start").disabled = false; return; }
   $("#start").disabled = false; $("#start").hidden = true; $("#stop").hidden = false;
   $("#live").hidden = false; $("#show").hidden = true; $("#cd").hidden = false;
+  bring($("#live"));
   let n = 5; setCd(n);
   cdTimer = setInterval(() => {
     n--;
@@ -266,6 +276,7 @@ async function startSend() {
     clearInterval(cdTimer);
     $("#cd").hidden = true; $("#show").hidden = false;
     order = null; pos = 0; playing = true; status(); loop();
+    bring($("#show"));
   }, 1000);
 }
 function stopSend() {
@@ -309,8 +320,13 @@ async function startScan(keep) {
     $("#rErr").textContent = "Camera unavailable (" + (e.name || "error") + "). Allow camera access in the browser, and open this page over HTTPS in its own tab if it is embedded.";
     $("#rprog").textContent = ""; return;
   }
-  const v = $("#vid"); v.srcObject = stream; await v.play();
+  const v = $("#vid"); v.muted = true; v.srcObject = stream;
+  try { await v.play(); } catch (e) {
+    $("#rErr").textContent = "Could not start the camera preview (" + (e.name || "error") + "). Tap Continue scanning to try again.";
+    stopCamera(); $("#rstop").hidden = true; $("#rcont").hidden = false; return;
+  }
   scanning = true; dirty = true;
+  $("#rprog").textContent = "Camera ready. Point it at the sender’s QR codes.";
   $("#rstop").hidden = false; $("#rcont").hidden = $("#rreset").hidden = true;
   rtimer = setInterval(refresh, 600);
   loop2();
@@ -341,9 +357,10 @@ function refresh() {
   const m = miss();
   $("#rbar").style.width = (got.size / RN * 100) + "%";
   $("#rprog").textContent = got.size === RN
-    ? "All " + RN + " codes received. Press Stop to see the results."
+    ? "All " + RN + " codes received."
     : "Received " + got.size + " of " + RN + ". Last scanned: code " + (last + 1) + ".";
   $("#miss").textContent = m.length ? "Missing codes: " + ranges(m) : "Nothing missing.";
+  if (got.size === RN && scanning) { try { navigator.vibrate && navigator.vibrate(200); } catch (e) {} finishScan(); }
 }
 function stopCamera() {
   scanning = false; clearInterval(rtimer);
@@ -352,7 +369,14 @@ function stopCamera() {
 }
 function resetRecv() { got = new Map(); RN = 0; rsid = ""; last = -1; $("#rbar").style.width = "0"; $("#miss").textContent = ""; $("#copymiss").hidden = true; $("#result").replaceChildren(); }
 
-$("#rstop").onclick = () => { dirty = true; refresh(); stopCamera(); $("#rstop").hidden = true; $("#rcont").hidden = $("#rreset").hidden = false; showResult(); };
+function finishScan() {
+  if (!scanning) return;
+  stopCamera();
+  dirty = true; refresh();
+  $("#rstop").hidden = true; $("#rcont").hidden = $("#rreset").hidden = false;
+  showResult();
+}
+$("#rstop").onclick = finishScan;
 $("#rcont").onclick = () => startScan(true);
 $("#rreset").onclick = () => startScan(false);
 $("#copymiss").onclick = async () => {
