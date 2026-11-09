@@ -67,6 +67,7 @@ video{width:100%;max-height:58vh;background:#000;display:block;border-radius:10p
 .det.s-hit{border-color:var(--ok)}.det.s-hit i{background:#22c55e;box-shadow:0 0 0 4px rgba(34,197,94,.25)}
 .det.s-warn i{background:#f59e0b}
 @keyframes pulse{50%{opacity:.3}}
+.sc{font:800 28px/1.2 ui-monospace,monospace;letter-spacing:.06em;padding:12px 14px;border:2px dashed var(--acc);border-radius:14px;text-align:center;word-break:break-all;user-select:all}
 @media (prefers-reduced-motion:reduce){.det i{animation:none!important}}
 #ov{position:absolute;left:12px;top:12px;width:calc(100% - 24px);height:calc(100% - 24px);pointer-events:none}
 .item{border-top:1px solid var(--line);padding-top:14px;margin-top:14px}
@@ -124,6 +125,9 @@ pre{white-space:pre-wrap;word-break:break-word;background:var(--bg);border-radiu
 <button class="btn alt" id="next">Next</button>
 <button class="btn alt" id="replay">Replay from start</button>
 </div>
+<label for="sc2">Receiver’s short code</label>
+<div class="row" style="margin-top:0"><input type="text" id="sc2" placeholder="e.g. 4K7Q-9M2D-X3" autocapitalize="characters" autocomplete="off" spellcheck="false"><button class="btn" id="scgo">Replay missed codes</button></div>
+<p class="note" id="scmsg"></p>
 <label for="rev">Show specific codes</label>
 <div class="row" style="margin-top:0"><input type="text" id="rev" placeholder="Missed codes, e.g. 3, 7-9, 12" inputmode="text"><button class="btn alt" id="revgo">Review</button></div>
 <p class="note">Review shows only the codes you list and holds each one still while the receiver scans it.</p>
@@ -137,12 +141,13 @@ pre{white-space:pre-wrap;word-break:break-word;background:var(--bg);border-radiu
 <div class="bar"><i id="rbar"></i></div>
 <p class="note" id="rprog">Waiting for camera…</p>
 <p class="note" id="miss"></p>
+<div id="scbox" hidden><p class="note" style="margin-bottom:6px">Short code for the sender. Type it into “Receiver’s short code” on the sender:</p><div class="sc" id="sc"></div></div>
 <p class="note err" id="rErr" role="alert"></p>
 <div class="row">
 <button class="btn big" id="rstop">Stop and show results</button>
 <button class="btn" id="rcont" hidden>Continue scanning</button>
 <button class="btn alt" id="rreset" hidden>Start over</button>
-<button class="btn alt" id="copymiss" hidden>Copy missing list</button>
+<button class="btn alt" id="copymiss" hidden>Copy short code</button>
 </div>
 <div id="result"></div>
 </section>
@@ -167,6 +172,41 @@ function ranges(a, max) {
     if (out.length >= max) { if (i < a.length) out.push("…"); break; }
   }
   return out.join(", ");
+}
+
+/* ---------- short codes for missed QR codes ---------- */
+const ALPHA = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+function vput(a, n) { while (n >= 128) { a.push((n & 127) | 128); n = Math.floor(n / 128); } a.push(n); }
+function vget(a, st) { let n = 0, m = 1, b; do { b = a[st.i++]; if (b === undefined) throw 0; n += (b & 127) * m; m *= 128; } while (b & 128); return n; }
+const chk = a => a.reduce((x, b) => (x * 31 + b) & 255, 7);
+function encodeMiss(sidNum, miss) {
+  const a = []; vput(a, sidNum);
+  let prev = 0;
+  for (let i = 0; i < miss.length;) {
+    let j = i; while (j + 1 < miss.length && miss[j + 1] === miss[j] + 1) j++;
+    vput(a, miss[i] - prev); vput(a, j - i); prev = miss[j] + 1; i = j + 1;
+  }
+  a.push(chk(a));
+  let bits = 0, acc = 0, out = "";
+  for (const b of a) { acc = (acc << 8) | b; bits += 8; while (bits >= 5) { out += ALPHA[(acc >> (bits - 5)) & 31]; bits -= 5; } acc &= (1 << bits) - 1; }
+  if (bits) out += ALPHA[(acc << (5 - bits)) & 31];
+  return out.replace(/(.{4})(?=.)/g, "$1-");
+}
+function decodeMiss(s) {
+  s = s.toUpperCase().replace(/O/g, "0").replace(/[IL]/g, "1").replace(/[^0-9A-Z]/g, "");
+  const a = []; let acc = 0, bits = 0;
+  for (const ch of s) {
+    const v = ALPHA.indexOf(ch); if (v < 0) return null;
+    acc = (acc << 5) | v; bits += 5;
+    if (bits >= 8) { a.push((acc >> (bits - 8)) & 255); bits -= 8; acc &= (1 << bits) - 1; }
+  }
+  if (a.length < 3) return null;
+  const c = a.pop(); if (chk(a) !== c) return null;
+  try {
+    const st = { i: 0 }, sidNum = vget(a, st), out = []; let prev = 0;
+    while (st.i < a.length) { const start = prev + vget(a, st), run = vget(a, st); for (let k = 0; k <= run; k++) out.push(start + k); prev = start + run + 1; }
+    return { sidNum, out };
+  } catch (e) { return null; }
 }
 
 /* ---------- modes ---------- */
@@ -223,7 +263,7 @@ async function build() {
   new DataView(all.buffer).setUint32(0, h.length);
   all.set(h, 4);
   let o = 4 + h.length; for (const p of parts) { all.set(p, o); o += p.length; }
-  sid = Math.random().toString(36).slice(2, 6); CSZ = +$("#csz").value; N = Math.ceil(all.length / CSZ);
+  sid = Math.random().toString(36).slice(2, 6).padEnd(4, "0"); CSZ = +$("#csz").value; N = Math.ceil(all.length / CSZ);
   const probe = "QT2|" + sid + "|" + N + "|" + N + "|" + CSZ + "|" + "A".repeat(4 * Math.ceil(CSZ / 3));
   tn = (makeQR(probe, 0).getModuleCount() - 17) / 4;
 }
@@ -313,6 +353,17 @@ $("#revgo").onclick = () => {
   order = [...set].sort((x, y) => x - y); pos = 0; playing = false; clearTimeout(timer); show(); status();
 };
 
+$("#scgo").onclick = () => {
+  const msg = $("#scmsg"), r = decodeMiss($("#sc2").value);
+  if (!all) { msg.textContent = "Press Start first, then enter the code."; return; }
+  if (!r) { msg.textContent = "That short code is not valid. Check it and try again."; return; }
+  if (r.sidNum !== parseInt(sid, 36)) { msg.textContent = "That code is from a different transfer."; return; }
+  const list = r.out.filter(i => i < N);
+  if (!list.length) { msg.textContent = "Nothing is missing in that code."; return; }
+  order = list; pos = 0; playing = true; status(); loop();
+  msg.textContent = "Replaying only " + list.length + " missed code" + (list.length > 1 ? "s" : "") + ": " + ranges(list) + ".";
+};
+
 /* ---------- receiver ---------- */
 let stream = null, scanning = false, got = new Map(), RN = 0, rsid = "", rcs = 200, last = -1, dirty = false, rtimer = null, t0 = 0;
 const work = document.createElement("canvas"), wx = work.getContext("2d", { willReadFrequently: true });
@@ -321,6 +372,7 @@ const miss = () => { const m = []; for (let i = 0; i < RN; i++) if (!got.has(i))
 async function startScan(keep) {
   if (scanning) return;
   if (!keep) resetRecv();
+  $("#scbox").hidden = true; $("#copymiss").hidden = true;
   $("#result").replaceChildren();
   $("#rErr").textContent = "";
   $("#rprog").textContent = "Waiting for camera permission…";
@@ -421,7 +473,7 @@ $("#rstop").onclick = finishScan;
 $("#rcont").onclick = () => startScan(true);
 $("#rreset").onclick = () => startScan(false);
 $("#copymiss").onclick = async () => {
-  try { await navigator.clipboard.writeText(ranges(miss(), 1e9).replace(/–/g, "-")); $("#copymiss").textContent = "Copied"; }
+  try { await navigator.clipboard.writeText($("#sc").textContent); $("#copymiss").textContent = "Copied"; }
   catch (e) { $("#copymiss").textContent = "Copy failed"; }
 };
 
@@ -441,8 +493,9 @@ function showResult() {
   const R = $("#result"); R.replaceChildren();
   if (!got.size) { R.append(el("p", { className: "note", textContent: "No codes were scanned." })); return; }
   const m = miss(), done = !m.length;
+  $("#scbox").hidden = done; if (!done) $("#sc").textContent = encodeMiss(parseInt(rsid, 36), m);
   const sum = el("div", { className: "item" }, [el("p", { className: done ? "good" : "err", textContent: done ? "All " + RN + " codes received." : "Received " + got.size + " of " + RN + ". Missing codes: " + ranges(m) })]);
-  if (!done) { sum.append(el("p", { className: "note", textContent: "Press Continue scanning to collect the rest. On the sender, type the missing numbers into Show specific codes to hold each one still." })); $("#copymiss").hidden = false; $("#copymiss").textContent = "Copy missing list"; }
+  if (!done) { sum.append(el("p", { className: "note", textContent: "On the sender, enter the short code shown above and press Replay missed codes, then press Continue scanning here." })); $("#copymiss").hidden = false; $("#copymiss").textContent = "Copy short code"; }
   R.append(sum);
   let meta = null, off = 0;
   try {
