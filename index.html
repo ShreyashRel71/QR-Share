@@ -49,7 +49,8 @@ textarea{min-height:84px;resize:vertical}
 .frame::before,.frame::after{content:"";position:absolute;width:30px;height:30px;border:5px solid var(--acc);border-radius:6px}
 .frame::before{top:-5px;left:-5px;border-right:0;border-bottom:0}
 .frame::after{bottom:-5px;right:-5px;border-left:0;border-top:0;border-color:var(--acc2)}
-#qr{display:block;max-width:100%}
+#qr{display:block;max-width:100%;height:auto;image-rendering:pixelated}
+.frame.q::before,.frame.q::after{display:none}
 .num{text-align:center;font-weight:800;font-size:26px;margin-top:14px;letter-spacing:-.01em}
 .bar{height:8px;background:var(--line);border-radius:8px;margin:12px 0 6px;overflow:hidden}.bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--acc),var(--acc2));border-radius:8px}
 .cd{text-align:center;padding:18px 0}
@@ -60,6 +61,14 @@ textarea{min-height:84px;resize:vertical}
 @keyframes ring{to{stroke-dashoffset:327}}
 .ringbox b{position:absolute;inset:0;display:grid;place-items:center;font-size:52px;font-weight:800}
 video{width:100%;max-height:58vh;background:#000;display:block;border-radius:10px}
+.det{display:flex;align-items:center;gap:10px;margin-top:12px;padding:9px 14px;border-radius:999px;border:1px solid var(--line);font-weight:600;font-size:14px;background:var(--bg)}
+.det i{width:12px;height:12px;border-radius:50%;background:var(--mute);flex:none}
+.det.s-search i{background:#f59e0b;animation:pulse 1s ease-in-out infinite}
+.det.s-hit{border-color:var(--ok)}.det.s-hit i{background:#22c55e;box-shadow:0 0 0 4px rgba(34,197,94,.25)}
+.det.s-warn i{background:#f59e0b}
+@keyframes pulse{50%{opacity:.3}}
+@media (prefers-reduced-motion:reduce){.det i{animation:none!important}}
+#ov{position:absolute;left:12px;top:12px;width:calc(100% - 24px);height:calc(100% - 24px);pointer-events:none}
 .item{border-top:1px solid var(--line);padding-top:14px;margin-top:14px}
 .item h3{margin:0 0 6px;font-size:16px;word-break:break-all}
 .item img,.item video{max-width:100%;display:block;margin:8px 0;border-radius:12px}
@@ -90,7 +99,7 @@ pre{white-space:pre-wrap;word-break:break-word;background:var(--bg);border-radiu
 <label for="spd">Speed: <span id="spdv">4</span> codes per second</label>
 <input type="range" id="spd" min="1" max="12" value="4" style="width:100%">
 <label for="csz">Code size</label>
-<select id="csz"><option value="120">Compact: easiest to scan</option><option value="200" selected>Standard</option><option value="320">Dense: fastest, needs a steady camera</option></select>
+<select id="csz"><option value="60">Compact: easiest to scan</option><option value="110" selected>Standard</option><option value="200">Dense: fastest, needs a steady camera</option></select>
 <label style="display:flex;gap:8px;align-items:center;font-weight:400"><input type="checkbox" id="lp" checked style="width:auto"> Loop continuously (turn off to show each code once, then stop)</label>
 <p class="note" id="est">Add something to send.</p>
 <div class="row">
@@ -105,7 +114,7 @@ pre{white-space:pre-wrap;word-break:break-word;background:var(--bg);border-radiu
 <p class="note">Get the receiving device ready. Codes start in a moment.</p>
 </div>
 <div id="show" hidden>
-<div class="stage"><div class="frame"><canvas id="qr"></canvas></div></div>
+<div class="stage"><div class="frame q"><canvas id="qr"></canvas></div></div>
 <div class="num" id="num"></div>
 <div class="bar"><i id="pbar"></i></div>
 <p class="note" id="status"></p>
@@ -123,7 +132,8 @@ pre{white-space:pre-wrap;word-break:break-word;background:var(--bg);border-radiu
 </section>
 
 <section class="panel" id="recv" hidden>
-<div class="frame" style="display:block"><video id="vid" playsinline muted></video></div>
+<div class="frame" style="display:block"><video id="vid" playsinline muted></video><canvas id="ov"></canvas></div>
+<div class="det s-off" id="det"><i></i><span id="dett">Camera starting…</span></div>
 <div class="bar"><i id="rbar"></i></div>
 <p class="note" id="rprog">Waiting for camera…</p>
 <p class="note" id="miss"></p>
@@ -222,9 +232,9 @@ function makeQR(str, type) { const q = qrcode(type, "L"); q.addData(str, "Byte")
 
 function draw(str) {
   const q = makeQR(str, tn), n = q.getModuleCount(), cv = $("#qr"), dpr = window.devicePixelRatio || 1;
-  const avail = Math.max(180, Math.min($("#show").clientWidth - 30, 460, window.innerHeight - 200));
+  const avail = Math.max(180, Math.min($("#show").clientWidth - 30, 520, window.innerHeight - 200));
   const cell = Math.max(2, Math.floor(avail * dpr / (n + 8))), dim = cell * (n + 8);
-  cv.width = cv.height = dim; cv.style.width = cv.style.height = dim / dpr + "px";
+  cv.width = cv.height = dim; cv.style.width = dim / dpr + "px"; cv.style.height = "auto";
   const cx = cv.getContext("2d");
   cx.fillStyle = "#fff"; cx.fillRect(0, 0, dim, dim); cx.fillStyle = "#000";
   for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) cx.fillRect((c + 4) * cell, (r + 4) * cell, cell, cell);
@@ -304,7 +314,7 @@ $("#revgo").onclick = () => {
 };
 
 /* ---------- receiver ---------- */
-let stream = null, scanning = false, got = new Map(), RN = 0, rsid = "", rcs = 200, last = -1, dirty = false, rtimer = null;
+let stream = null, scanning = false, got = new Map(), RN = 0, rsid = "", rcs = 200, last = -1, dirty = false, rtimer = null, t0 = 0;
 const work = document.createElement("canvas"), wx = work.getContext("2d", { willReadFrequently: true });
 const miss = () => { const m = []; for (let i = 0; i < RN; i++) if (!got.has(i)) m.push(i); return m; };
 
@@ -315,7 +325,7 @@ async function startScan(keep) {
   $("#rErr").textContent = "";
   $("#rprog").textContent = "Waiting for camera permission…";
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1280 } }, audio: false });
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment", width: { ideal: 1920 } }, audio: false });
   } catch (e) {
     $("#rErr").textContent = "Camera unavailable (" + (e.name || "error") + "). Allow camera access in the browser, and open this page over HTTPS in its own tab if it is embedded.";
     $("#rprog").textContent = ""; return;
@@ -325,26 +335,55 @@ async function startScan(keep) {
     $("#rErr").textContent = "Could not start the camera preview (" + (e.name || "error") + "). Tap Continue scanning to try again.";
     stopCamera(); $("#rstop").hidden = true; $("#rcont").hidden = false; return;
   }
-  scanning = true; dirty = true;
+  scanning = true; dirty = true; t0 = Date.now();
   $("#rprog").textContent = "Camera ready. Point it at the sender’s QR codes.";
   $("#rstop").hidden = false; $("#rcont").hidden = $("#rreset").hidden = true;
   rtimer = setInterval(refresh, 600);
   loop2();
 }
+let bd = null, busy = false, scans = 0, scans0 = 0, t1 = 0, rate = 0, lastHit = 0, lastOther = 0, ovPts = null, ovOk = false, ovT = 0, dk = "";
+function drawOv(pts) {
+  const v = $("#vid"), cv = $("#ov"), cw = v.clientWidth, ch = v.clientHeight;
+  if (cv.width !== cw || cv.height !== ch) { cv.width = cw; cv.height = ch; }
+  const cx = cv.getContext("2d"); cx.clearRect(0, 0, cw, ch);
+  if (!pts || !pts.length || !v.videoWidth) return;
+  const sc = Math.min(cw / v.videoWidth, ch / v.videoHeight), ox = (cw - v.videoWidth * sc) / 2, oy = (ch - v.videoHeight * sc) / 2;
+  cx.beginPath();
+  pts.forEach((p, i) => { const x = ox + p.x * sc, y = oy + p.y * sc; if (i) cx.lineTo(x, y); else cx.moveTo(x, y); });
+  cx.closePath(); cx.lineWidth = 4; cx.strokeStyle = ovOk ? "#22c55e" : "#f59e0b"; cx.fillStyle = ovOk ? "rgba(34,197,94,.22)" : "rgba(245,158,11,.22)";
+  cx.fill(); cx.stroke();
+}
+function setDet(st) {
+  const t = st === "hit" ? "QR Share code detected \u00b7 code " + (last + 1) : st === "warn" ? "QR found, but it is not a QR Share code" : st === "off" ? "Camera off" : "Searching for a QR code\u2026";
+  const full = t + (st === "off" ? "" : " \u00b7 " + rate + " scans/s");
+  if (dk === st + full) return;
+  dk = st + full; $("#det").className = "det s-" + st; $("#dett").textContent = full;
+}
+try { if ("BarcodeDetector" in window) bd = new BarcodeDetector({ formats: ["qr_code"] }); } catch (e) { bd = null; }
+async function scanOnce() {
+  const v = $("#vid"); scans++;
+  if (bd) {
+    try { const r = await bd.detect(v); if (r.length) { r.forEach(c => take(c.rawValue, c.cornerPoints)); return; } } catch (e) { bd = null; }
+  }
+  const w = Math.min(v.videoWidth, 1280), h = Math.round(w * v.videoHeight / v.videoWidth);
+  work.width = w; work.height = h; wx.drawImage(v, 0, 0, w, h);
+  const r = jsQR(wx.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: "dontInvert" });
+  if (r && r.data) { const l = r.location, k = v.videoWidth / w; take(r.data, [l.topLeftCorner, l.topRightCorner, l.bottomRightCorner, l.bottomLeftCorner].map(q => ({ x: q.x * k, y: q.y * k }))); }
+}
 function loop2() {
   if (!scanning) return;
   const v = $("#vid");
-  if (v.readyState >= 2 && v.videoWidth) {
-    const w = Math.min(v.videoWidth, 960), h = Math.round(w * v.videoHeight / v.videoWidth);
-    work.width = w; work.height = h; wx.drawImage(v, 0, 0, w, h);
-    const r = jsQR(wx.getImageData(0, 0, w, h).data, w, h, { inversionAttempts: "dontInvert" });
-    if (r && r.data) take(r.data);
-  }
+  if (!busy && v.readyState >= 2 && v.videoWidth) { busy = true; scanOnce().catch(() => {}).finally(() => { busy = false; }); }
+  const now = Date.now();
+  if (ovPts) { if (now - ovT > 350) { ovPts = null; drawOv(null); } else drawOv(ovPts); }
+  setDet(now - lastHit < 1200 ? "hit" : now - lastOther < 1200 ? "warn" : "search");
   requestAnimationFrame(loop2);
 }
-function take(s) {
-  const p = s.split("|");
-  if (p.length !== 6 || p[0] !== "QT2") return;
+function take(s, pts) {
+  const p = s.split("|"), ok = p.length === 6 && p[0] === "QT2", now = Date.now();
+  ovPts = pts || null; ovOk = ok; ovT = now;
+  if (!ok) { lastOther = now; return; }
+  lastHit = now;
   const i = +p[2], n = +p[3], cs = +p[4];
   if (p[1] !== rsid) { got.clear(); rsid = p[1]; RN = n; rcs = cs; }
   last = i;
@@ -352,6 +391,8 @@ function take(s) {
   try { got.set(i, unb64(p[5])); dirty = true; } catch (e) {}
 }
 function refresh() {
+  const nt = Date.now(); if (nt - t1 > 400) { rate = Math.round((scans - scans0) * 1000 / (nt - t1)); scans0 = scans; t1 = nt; }
+  if (scanning && !RN && Date.now() - t0 > 8000) $("#rprog").textContent = "No QR Share code found yet. Move closer, hold steady, brighten the sender’s screen and try the Compact code size.";
   if (!dirty || !RN) return;
   dirty = false;
   const m = miss();
@@ -365,7 +406,7 @@ function refresh() {
 function stopCamera() {
   scanning = false; clearInterval(rtimer);
   if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; }
-  $("#vid").srcObject = null;
+  $("#vid").srcObject = null; ovPts = null; drawOv(null); setDet("off");
 }
 function resetRecv() { got = new Map(); RN = 0; rsid = ""; last = -1; $("#rbar").style.width = "0"; $("#miss").textContent = ""; $("#copymiss").hidden = true; $("#result").replaceChildren(); }
 
